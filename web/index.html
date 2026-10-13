@@ -1,73 +1,151 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f2f24">
     <title>Smart Farming System</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<div id="mainApp">
-    <div class="top-bar">
-        <button onclick="uploadImage()">Upload Image</button>
-        <button onclick="takePhoto()">Take Photo</button>
-        <button onclick="analyze()">Analyse</button>
-        <button class="clear" onclick="clearResults()">Clear Results</button>
-        <button onclick="openDiagrams()">View Diagrams</button>
-    </div>
-
-    <div class="container">
-
-        <div class="panel">
-            <h3>Original Image</h3>
-            <img id="preview" />
-            <video id="camera" autoplay style="display:none;"></video>
-            <button id="captureBtn" style="display:none;">Capture</button>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand-block">
+            <div class="brand-mark">SF</div>
+            <div>
+                <p class="eyebrow">Smart agriculture</p>
+                <h1>FieldSense AI</h1>
+            </div>
         </div>
 
-        <div class="panel">
-            <h3>Annotated Image</h3>
-            <img id="output" />
+        <nav class="sidebar-nav" aria-label="Primary navigation">
+            <button class="nav-item active" type="button" onclick="goBack()">
+                <span>Overview</span>
+                <small>Analyze crop health</small>
+            </button>
+            <button class="nav-item" type="button" onclick="openDiagrams()">
+                <span>Model insights</span>
+                <small>Validation diagrams</small>
+            </button>
+        </nav>
+
+        <div class="sidebar-note">
+            <span class="status-dot"></span>
+            <div>
+                <strong>Local AI workspace</strong>
+                <p>Images are processed by the model running on this computer.</p>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div id="mainApp">
+            <header class="page-header">
+                <div>
+                    <p class="eyebrow">Crop diagnostics</p>
+                    <h2>Plant health analysis</h2>
+                    <p class="subtitle">Upload or capture a crop image to detect disease indicators and review field recommendations.</p>
+                </div>
+                <div class="header-badge">YOLO-powered detection</div>
+            </header>
+
+            <section class="action-bar" aria-label="Image analysis actions">
+                <button class="btn btn-primary" onclick="uploadImage()">Choose image</button>
+                <button class="btn btn-secondary" onclick="takePhoto()">Use camera</button>
+                <button class="btn btn-accent" id="analyzeBtn" onclick="analyze()">Run analysis</button>
+                <button class="btn btn-ghost" onclick="clearResults()">Clear</button>
+            </section>
+
+            <section class="analysis-grid">
+                <article class="panel media-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="panel-kicker">Input</p>
+                            <h3>Original image</h3>
+                        </div>
+                        <span class="step-chip">01</span>
+                    </div>
+                    <div class="image-stage" id="previewStage">
+                        <div class="empty-state" id="previewEmpty">
+                            <div class="empty-icon">+</div>
+                            <strong>Add a crop image</strong>
+                            <span>JPG, JPEG or PNG</span>
+                        </div>
+                        <img id="preview" alt="Selected crop preview">
+                        <video id="camera" autoplay playsinline></video>
+                    </div>
+                    <button id="captureBtn" class="btn btn-secondary full-width" type="button">Capture photo</button>
+                </article>
+
+                <article class="panel media-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="panel-kicker">Output</p>
+                            <h3>Annotated image</h3>
+                        </div>
+                        <span class="step-chip">02</span>
+                    </div>
+                    <div class="image-stage">
+                        <div class="empty-state" id="outputEmpty">
+                            <div class="empty-icon">AI</div>
+                            <strong>Ready for analysis</strong>
+                            <span>Detection boxes will appear here.</span>
+                        </div>
+                        <img id="output" alt="AI annotated crop result">
+                    </div>
+                </article>
+
+                <article class="panel results-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="panel-kicker">Diagnosis</p>
+                            <h3>Results & guidance</h3>
+                        </div>
+                        <span class="step-chip">03</span>
+                    </div>
+                    <div id="analysisStatus" class="analysis-status idle">
+                        <span class="status-indicator"></span>
+                        <span>Select an image to begin.</span>
+                    </div>
+                    <div id="results" class="results-list"></div>
+                </article>
+            </section>
+
+            <section class="panel assistant-panel">
+                <div class="assistant-header">
+                    <div>
+                        <p class="panel-kicker">AI assistant</p>
+                        <h3>Explain this result</h3>
+                        <p>Turn the first detection into a plain-language field summary.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="askAI()">Explain result</button>
+                </div>
+                <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
+            </section>
         </div>
 
-        <div class="panel results">
-            <h3>Results</h3>
-            <div id="results"></div>
-        </div>
+        <section id="diagrams" class="diagrams-view">
+            <header class="page-header compact-header">
+                <div>
+                    <p class="eyebrow">Model diagnostics</p>
+                    <h2>Validation diagrams</h2>
+                    <p class="subtitle">Review performance curves and confusion matrices generated during model validation.</p>
+                </div>
+                <button class="btn btn-secondary" onclick="goBack()">Back to analysis</button>
+            </header>
 
-    </div>
-</div>
-<div id="diagrams" style="display:none;">
-
-    <div class="top-bar">
-        <button onclick="goBack()">Back to App</button>
-    </div>
-
-    <div class="diagram-section">
-        <h2>System Diagrams</h2>
-
-        <div class="diagram-grid">
-            <img src="runs/detect/val/BoxF1_curve.png">
-            <img src="runs/detect/val/BoxP_curve.png">
-            <img src="runs/detect/val/BoxPR_curve.png">
-            <img src="runs/detect/val/BoxR_curve.png">
-            <img src="runs/detect/val/confusion_matrix.png">
-            <img src="runs/detect/val/confusion_matrix_normalized.png">
-        </div>
-    </div>
-
-</div>
-
-<div class="chatbox">
-    <h3>AI Assistant</h3>
-
-    <div id="chatMessages" class="chat-messages"></div>
-
-    <div class="chat-input">
-        <button onclick="askAI()">Explain Result</button>
-    </div>
+            <div class="diagram-grid">
+                <figure class="diagram-card"><img src="runs/detect/val/BoxF1_curve.png" alt="F1 curve"><figcaption>F1 confidence curve</figcaption></figure>
+                <figure class="diagram-card"><img src="runs/detect/val/BoxP_curve.png" alt="Precision curve"><figcaption>Precision curve</figcaption></figure>
+                <figure class="diagram-card"><img src="runs/detect/val/BoxPR_curve.png" alt="Precision recall curve"><figcaption>Precision-recall curve</figcaption></figure>
+                <figure class="diagram-card"><img src="runs/detect/val/BoxR_curve.png" alt="Recall curve"><figcaption>Recall curve</figcaption></figure>
+                <figure class="diagram-card"><img src="runs/detect/val/confusion_matrix.png" alt="Confusion matrix"><figcaption>Confusion matrix</figcaption></figure>
+                <figure class="diagram-card"><img src="runs/detect/val/confusion_matrix_normalized.png" alt="Normalized confusion matrix"><figcaption>Normalized confusion matrix</figcaption></figure>
+            </div>
+        </section>
+    </main>
 </div>
 <script src="/eel.js"></script>
 <script src="script.js"></script>
-
 </body>
 </html>

@@ -1,12 +1,15 @@
 let selectedImageBase64 = "";
 let selectedImageFilename = "";
 let stream = null;
+window.lastDetections = [];
+
+const el = id => document.getElementById(id);
 
 function formatLabel(label) {
-    const parts = label.split("___");
+    const parts = String(label || "Unknown").split("___");
     return {
-        plant: parts[0],
-        disease: parts[1] || "Unknown"
+        plant: (parts[0] || "Unknown crop").replaceAll("_", " "),
+        disease: (parts[1] || "Unknown condition").replaceAll("_", " ")
     };
 }
 
@@ -16,186 +19,210 @@ function getConfidenceLevel(conf) {
     return "Low confidence";
 }
 
-function getStatusEmoji(disease) {
-    if (disease.toLowerCase() === "healthy") {
-        return "Healthy";
-    }
-    return "Disease Detected";
+function setStatus(message, state = "idle") {
+    const status = el("analysisStatus");
+    if (!status) return;
+    status.className = `analysis-status ${state}`;
+    status.innerHTML = `<span class="status-indicator"></span><span>${message}</span>`;
 }
 
+function showMedia(targetId, emptyId) {
+    const target = el(targetId);
+    const empty = el(emptyId);
+    if (target) target.style.display = "block";
+    if (empty) empty.style.display = "none";
+}
 
-// Upload image
 function uploadImage() {
     const input = document.createElement("input");
     input.type = "file";
-
-    input.onchange = e => {
-        const file = e.target.files[0];
-
+    input.accept = "image/png,image/jpeg";
+    input.onchange = event => {
+        const file = event.target.files?.[0];
+        if (!file) return;
         const reader = new FileReader();
-        reader.onload = function(event) {
-            document.getElementById("preview").src = event.target.result;
-            selectedImageBase64 = event.target.result;
+        reader.onload = e => {
+            el("preview").src = e.target.result;
+            showMedia("preview", "previewEmpty");
+            selectedImageBase64 = e.target.result;
             selectedImageFilename = file.name;
+            setStatus("Image ready. Run the analysis when you are ready.", "idle");
         };
         reader.readAsDataURL(file);
     };
-
     input.click();
 }
 
-// Take photo
 async function takePhoto() {
-    const video = document.getElementById("camera");
-    const captureBtn = document.getElementById("captureBtn");
-
-    video.style.display = "block";
-    captureBtn.style.display = "inline-block";
-
+    const video = el("camera");
+    const captureBtn = el("captureBtn");
     try {
+        stopCamera();
         stream = await navigator.mediaDevices.getUserMedia({ video: true });
         video.srcObject = stream;
+        video.style.display = "block";
+        el("preview").style.display = "none";
+        el("previewEmpty").style.display = "none";
+        captureBtn.style.display = "block";
+        setStatus("Camera active. Capture a clear image of the crop.", "idle");
     } catch (err) {
-        alert("Camera error: " + err);
+        setStatus(`Camera unavailable: ${err.message || err}`, "error");
     }
 }
 
-// Capture image
-document.getElementById("captureBtn").onclick = function() {
-    const video = document.getElementById("camera");
-    const canvas = document.createElement("canvas");
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0);
-
-    const dataURL = canvas.toDataURL("image/jpeg");
-
-    document.getElementById("preview").src = dataURL;
-    selectedImageBase64 = dataURL;
-    selectedImageFilename = "capture.jpg";
-
-    // Stop camera
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-    }
-
-    video.style.display = "none";
-    document.getElementById("captureBtn").style.display = "none";
-};
-
-// Analyze
-async function analyze() {
-    if (!selectedImageBase64) {
-        alert("Select an image first");
-        return;
-    }
-
-    const result = await eel.analyze_image(
-        selectedImageBase64,
-        selectedImageFilename
-    )();
-    window.lastDetections = result.detections;
-
-    if (result.error) {
-        document.getElementById("results").innerText = result.error;
-        return;
-    }
-
-    document.getElementById("output").src =
-        result.image + "?t=" + new Date().getTime();
-
-    let html = "";
-
-    result.detections.forEach(d => {
-    const info = formatLabel(d.class);
-    const level = getConfidenceLevel(d.confidence);
-    const status = getStatusEmoji(info.disease);
-
-    html += `
-        <div class="result-card">
-            <h3>${info.plant}</h3>
-            <p>${status}</p>
-            <p><strong>Condition:</strong> ${info.disease}</p>
-            <p><strong>Confidence:</strong> ${level}</p>
-            <p class="rec">${d.recommendation}</p>
-
-            <hr>
-
-            <p><strong>Weed Risk:</strong> ${d.weed_risk}</p>
-            <p><strong>Common Weeds:</strong> ${d.common_weeds.join(", ")}</p>
-            <p><strong>Weed Advice:</strong> ${d.weed_advice}</p>
-
-        </div>
-    `;
-});
-
-document.getElementById("results").innerHTML = html;
-}
-
-// Clear
-function clearResults() {
-    const preview = document.getElementById("preview");
-    const output = document.getElementById("output");
-    const results = document.getElementById("results");
-    const chat = document.getElementById("chatMessages");
-    const video = document.getElementById("camera");
-    const captureBtn = document.getElementById("captureBtn");
-
-
-    if (preview) preview.src = "";
-    if (output) output.src = "";
-    if (results) results.innerHTML = "";
-    if (chat) chat.innerHTML = "";
-
-    selectedImageBase64 = "";
-    selectedImageFilename = "";
-    window.lastDetections = [];
-
-}
-
-// switch to diagrams
-function openDiagrams() {
+function stopCamera() {
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
         stream = null;
     }
-
-    document.getElementById("mainApp").style.display = "none";
-    document.getElementById("diagrams").style.display = "block";
+    const video = el("camera");
+    if (video) {
+        video.srcObject = null;
+        video.style.display = "none";
+    }
+    if (el("captureBtn")) el("captureBtn").style.display = "none";
 }
 
-//back to main app
+el("captureBtn").onclick = function () {
+    const video = el("camera");
+    if (!video.videoWidth || !video.videoHeight) {
+        setStatus("Camera image is not ready yet.", "error");
+        return;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const dataURL = canvas.toDataURL("image/jpeg", 0.92);
+    el("preview").src = dataURL;
+    showMedia("preview", "previewEmpty");
+    selectedImageBase64 = dataURL;
+    selectedImageFilename = "capture.jpg";
+    stopCamera();
+    setStatus("Photo captured. Run the analysis when you are ready.", "idle");
+};
+
+async function analyze() {
+    if (!selectedImageBase64) {
+        setStatus("Select or capture an image first.", "error");
+        return;
+    }
+
+    const analyzeBtn = el("analyzeBtn");
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = "Analyzing…";
+    setStatus("Running the crop-health model…", "loading");
+
+    try {
+        const result = await eel.analyze_image(selectedImageBase64, selectedImageFilename)();
+        if (!result || result.error) {
+            throw new Error(result?.error || "The backend returned no result.");
+        }
+
+        window.lastDetections = Array.isArray(result.detections) ? result.detections : [];
+        el("output").src = `${result.image}?t=${Date.now()}`;
+        showMedia("output", "outputEmpty");
+        renderResults(window.lastDetections);
+        setStatus(
+            window.lastDetections.length
+                ? `${window.lastDetections.length} detection${window.lastDetections.length === 1 ? "" : "s"} found.`
+                : "Analysis complete. No detections were returned.",
+            "success"
+        );
+    } catch (err) {
+        window.lastDetections = [];
+        el("results").innerHTML = `<div class="result-card"><p>${escapeHtml(err.message || String(err))}</p></div>`;
+        setStatus("Analysis failed. Review the error below.", "error");
+    } finally {
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = "Run analysis";
+    }
+}
+
+function renderResults(detections) {
+    if (!detections.length) {
+        el("results").innerHTML = `<div class="result-card"><p>No disease or weed-related detections were returned for this image.</p></div>`;
+        return;
+    }
+
+    el("results").innerHTML = detections.map(d => {
+        const info = formatLabel(d.class);
+        const confidence = Number(d.confidence || 0);
+        const healthy = info.disease.toLowerCase() === "healthy";
+        const weeds = Array.isArray(d.common_weeds) ? d.common_weeds.join(", ") : "Unknown";
+        return `
+            <article class="result-card">
+                <div class="result-card-header">
+                    <div>
+                        <p class="panel-kicker">${healthy ? "Healthy crop" : "Condition detected"}</p>
+                        <h4>${escapeHtml(info.plant)}</h4>
+                    </div>
+                    <span class="meta-chip">${escapeHtml(getConfidenceLevel(confidence))}</span>
+                </div>
+                <div class="result-meta">
+                    <span class="meta-chip">${escapeHtml(info.disease)}</span>
+                    <span class="meta-chip warning">Weed risk: ${escapeHtml(d.weed_risk || "Unknown")}</span>
+                </div>
+                <p><strong>Common weeds:</strong> ${escapeHtml(weeds)}</p>
+                <p><strong>Weed guidance:</strong> ${escapeHtml(d.weed_advice || "No advice available.")}</p>
+                <p class="recommendation"><strong>Crop recommendation:</strong> ${escapeHtml(d.recommendation || "Consult a specialist for advice.")}</p>
+            </article>`;
+    }).join("");
+}
+
+function clearResults() {
+    stopCamera();
+    ["preview", "output"].forEach(id => {
+        el(id).src = "";
+        el(id).style.display = "none";
+    });
+    el("previewEmpty").style.display = "grid";
+    el("outputEmpty").style.display = "grid";
+    el("results").innerHTML = "";
+    el("chatMessages").innerHTML = "";
+    selectedImageBase64 = "";
+    selectedImageFilename = "";
+    window.lastDetections = [];
+    setStatus("Select an image to begin.", "idle");
+}
+
+function openDiagrams() {
+    stopCamera();
+    el("mainApp").style.display = "none";
+    el("diagrams").style.display = "block";
+}
+
 function goBack() {
-    document.getElementById("diagrams").style.display = "none";
-    document.getElementById("mainApp").style.display = "block";
+    el("diagrams").style.display = "none";
+    el("mainApp").style.display = "block";
 }
 
-// Chat with AI
 function addMessage(text, type) {
-    const container = document.getElementById("chatMessages");
-
+    const container = el("chatMessages");
     const msg = document.createElement("div");
     msg.className = type === "user" ? "user-msg" : "ai-msg";
-
-    msg.innerText = text;
+    msg.textContent = text;
     container.appendChild(msg);
-
     container.scrollTop = container.scrollHeight;
 }
 
 function askAI() {
-    if (!window.lastDetections || window.lastDetections.length === 0) {
-        addMessage("No analysis available.", "ai");
+    if (!window.lastDetections.length) {
+        addMessage("Run an analysis first so I have a result to explain.", "ai");
         return;
     }
-    const d = window.lastDetections[0];
-
-    // User's message
     addMessage("Explain the result", "user");
-
-    // AI message
-    addMessage(d.ai_explanation || "No AI explanation available.", "ai");
+    const d = window.lastDetections[0];
+    addMessage(d.ai_explanation || "No AI explanation is available for this detection.", "ai");
 }
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+window.addEventListener("beforeunload", stopCamera);

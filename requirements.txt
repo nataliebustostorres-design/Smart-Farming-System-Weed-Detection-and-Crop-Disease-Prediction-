@@ -1,0 +1,4 @@
+eel>=0.16,<1
+ultralytics>=8.0,<9
+opencv-python>=4.8,<5
+pillow>=10,<13
